@@ -23,6 +23,7 @@ use hal::{
     device::Device as _,
     window::{PresentationSurface as _, Surface as _},
 };
+use naga::front::wgsl::ParseError as WgslParseError;
 use parking_lot::{Mutex, MutexGuard};
 use thiserror::Error;
 use wgt::{BufferAddress, BufferSize, InputStepMode, TextureDimension, TextureFormat};
@@ -1902,12 +1903,12 @@ impl<G: GlobalIdentityHandlerFactory> Global<G> {
             .push(bind_group_id);
     }
 
-    pub fn device_create_shader_module<B: GfxBackend>(
+    pub fn device_create_shader_module<'a, B: GfxBackend>(
         &self,
         device_id: id::DeviceId,
-        source: pipeline::ShaderModuleSource,
+        source: pipeline::ShaderModuleSource<'a>,
         id_in: Input<G, id::ShaderModuleId>,
-    ) -> Result<id::ShaderModuleId, CreateShaderModuleError> {
+    ) -> Result<id::ShaderModuleId, CreateShaderModuleError<'a>> {
         span!(_guard, INFO, "Device::create_shader_module");
 
         let hub = B::hub(self);
@@ -1940,9 +1941,7 @@ impl<G: GlobalIdentityHandlerFactory> Global<G> {
                 (spv, module)
             }
             pipeline::ShaderModuleSource::Wgsl(code) => {
-                // TODO: refactor the corresponding Naga error to be owned, and then
-                // display it instead of unwrapping
-                let module = naga::front::wgsl::parse_str(&code).unwrap();
+                let module = naga::front::wgsl::parse_str(&code)?;
                 let spv = naga::back::spv::Writer::new(&module.header, spv_flags).write(&module);
                 (
                     Cow::Owned(spv),
@@ -3094,11 +3093,21 @@ pub enum CreateSamplerError {
 }
 
 #[derive(Clone, Debug, Error)]
-pub enum CreateShaderModuleError {
+pub enum CreateShaderModuleError<'a> {
+    #[error("failed to parse WGSL: {0}")]
+    ParseError(WgslParseError<'a>),
     #[error("not enough memory left")]
     OutOfMemory,
     #[error(transparent)]
     Validation(#[from] naga::proc::ValidationError),
+}
+
+// Need to implement this manually because of
+// https://github.com/dtolnay/thiserror/issues/68
+impl<'a> From<WgslParseError<'a>> for CreateShaderModuleError<'a> {
+    fn from(error: WgslParseError<'a>) -> Self {
+        Self::ParseError(error)
+    }
 }
 
 #[derive(Clone, Debug, Error)]

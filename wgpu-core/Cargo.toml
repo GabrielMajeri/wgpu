@@ -42,7 +42,7 @@ thiserror = "1"
 
 [dependencies.naga]
 git = "https://github.com/gfx-rs/naga"
-rev = "94802078c3bc5d138f497419ea3e7a869f10916d"
+rev = "115c29c0223eee9c98498fb91d5e7660d89389d8"
 features = ["spirv"]
 
 [dependencies.gfx-descriptor]
